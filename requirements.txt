@@ -1,3 +1,6 @@
 fastapi
 requests
 uvicorn[standard]
+beautifulsoup4
+ddgs
+python-dotenv
