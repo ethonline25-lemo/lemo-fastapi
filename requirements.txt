@@ -1,4 +1,5 @@
 fastapi
+prisma
 requests
 uvicorn[standard]
 beautifulsoup4
