@@ -200,3 +200,130 @@ def clear_all_documents():
             return {"status": "success", "message": "No documents to delete"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+# 7️⃣ Store page vector data (content chunks with embeddings)
+def store_page_vector(url: str, content: str, embedding: List[float]):
+    """
+    Store page content with its vector embedding.
+    Multiple chunks can be stored for the same URL.
+    
+    Args:
+        url: The page URL
+        content: The text content/chunk
+        embedding: Vector embedding of the content
+        
+    Returns:
+        Dict with status and message
+    """
+    if len(embedding) != VECTOR_DIM:
+        raise ValueError(f"Embedding dimension mismatch. Expected {VECTOR_DIM}, got {len(embedding)}")
+    
+    try:
+        # Create a unique key for this content chunk
+        # Combine URL and content hash to allow multiple chunks per URL
+        content_hash = hashlib.md5(content.encode()).hexdigest()
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        chunk_key = f"page:{url_hash}:{content_hash}"
+        
+        # Convert embedding to bytes
+        emb_array = np.array(embedding, dtype=np.float32).tobytes()
+        
+        # Store the page content chunk
+        r.hset(chunk_key, mapping={
+            "url": url,
+            "content": content,
+            "embedding": emb_array
+        })
+        
+        # Add to the set of all page chunks
+        r.sadd("page_keys", chunk_key)
+        
+        # Also track which chunks belong to this URL
+        r.sadd(f"url_chunks:{url_hash}", chunk_key)
+        
+        return {"status": "success", "message": f"Stored page vector for {url}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to store page vector: {str(e)}"}
+
+
+# 8️⃣ Get relevant content for a URL based on query embedding
+def get_relevant_content(url: str, query_embedding: List[float], top_k: int = 3) -> List[Tuple[str, float]]:
+    """
+    Get the most relevant content chunks for a specific URL based on query similarity.
+    
+    Args:
+        url: The page URL to search within
+        query_embedding: Vector embedding of the query
+        top_k: Number of most relevant chunks to return
+        
+    Returns:
+        List of tuples (content, similarity_score) ordered by relevance
+    """
+    if len(query_embedding) != VECTOR_DIM:
+        raise ValueError(f"Query embedding dimension mismatch. Expected {VECTOR_DIM}, got {len(query_embedding)}")
+    
+    try:
+        # Get all chunks for this URL
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        chunk_keys = r.smembers(f"url_chunks:{url_hash}")
+        
+        if not chunk_keys:
+            print(f"[WARNING] No content chunks found for URL: {url}")
+            return []
+        
+        print(f"[LOG] Searching through {len(chunk_keys)} content chunks for {url}")
+        
+        query_vector = np.array(query_embedding, dtype=np.float32)
+        query_norm = np.linalg.norm(query_vector)
+        
+        similarities = []
+        
+        # Calculate cosine similarity for each chunk
+        for key in chunk_keys:
+            try:
+                # Decode key if it's bytes
+                if isinstance(key, bytes):
+                    key = key.decode('utf-8')
+                
+                # Get the chunk data
+                chunk_data = r.hgetall(key)
+                
+                if not chunk_data or b'embedding' not in chunk_data or b'content' not in chunk_data:
+                    continue
+                
+                # Extract embedding
+                emb_bytes = chunk_data[b'embedding']
+                chunk_vector = np.frombuffer(emb_bytes, dtype=np.float32)
+                
+                # Extract content
+                content = chunk_data[b'content'].decode('utf-8') if isinstance(chunk_data[b'content'], bytes) else chunk_data[b'content']
+                
+                # Calculate cosine similarity
+                chunk_norm = np.linalg.norm(chunk_vector)
+                
+                if chunk_norm == 0 or query_norm == 0:
+                    similarity = 0.0
+                else:
+                    similarity = np.dot(query_vector, chunk_vector) / (query_norm * chunk_norm)
+                
+                similarities.append((content, float(similarity)))
+                
+            except Exception as e:
+                print(f"[WARNING] Error processing chunk {key}: {e}")
+                continue
+        
+        # Sort by similarity (highest first) and return top_k
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        
+        print(f"[LOG] Found {len(similarities)} valid content chunks")
+        if similarities:
+            print(f"[LOG] Top similarity score: {similarities[0][1]:.4f}")
+        
+        return similarities[:top_k]
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to get relevant content: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
