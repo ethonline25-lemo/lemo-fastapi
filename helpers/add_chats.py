@@ -1,7 +1,9 @@
-import requests
 from helpers.redis_functions import add_message_to_chat
+from prisma import Prisma
 
-def add_chats(session_id: str, message: str, message_type: str, detected_intent: str, user_id: str):
+prisma = Prisma()
+
+async def add_chats(session_id: str, message: str, message_type: str, detected_intent: str, user_id: str):
     try:
         # Validate inputs
         if not session_id or not user_id:
@@ -16,26 +18,29 @@ def add_chats(session_id: str, message: str, message_type: str, detected_intent:
             print(f"[ERROR] Invalid message_type: {message_type}")
             return {"status": "error", "message": f"Invalid message_type: {message_type}. Must be user/assistant/system"}
         
-        url = "http://localhost:3000/api/sessions/message"
-        headers = {
-            "Authorization": user_id,
-            "Content-Type": "application/json"
-        }
-        data = {
-            "session_id": session_id,
-            "message": message,
-            "message_type": message_type,
-            "detected_intent": detected_intent
-        }
+        if detected_intent and (not isinstance(detected_intent, str) or len(detected_intent) > 100):
+            print(f"[ERROR] Detected intent must be a string with max length 100")
+            return {"status": "error", "message": "Detected intent must be a string with max length 100"}
         
-        # Send message to external API
+        # Connect to database if not connected
+        if not prisma.is_connected():
+            await prisma.connect()
+        
+        # Save message to database
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-            response.raise_for_status()
-            print(f"[LOG] Message sent to external API for session {session_id}")
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Failed to send message to external API: {e}")
-            # Continue to store in Redis even if external API fails
+            new_message = await prisma.chat_messages.create(
+                data={
+                    "session_id": session_id,
+                    "message": message,
+                    "message_type": message_type,
+                    "user_id": user_id,
+                    "detected_intent": detected_intent
+                }
+            )
+            print(f"[LOG] Message saved to database for session {session_id}")
+        except Exception as e:
+            print(f"[ERROR] Failed to save message to database: {e}")
+            return {"status": "error", "message": f"Failed to save message to database: {str(e)}"}
         
         # Store message in Redis
         result = add_message_to_chat(session_id, message, message_type, detected_intent)
@@ -45,7 +50,7 @@ def add_chats(session_id: str, message: str, message_type: str, detected_intent:
             return result
         
         print(f"[LOG] Message successfully added for session {session_id}")
-        return {"status": "success", "message": "Message added"}
+        return {"status": "success", "message": "Message added", "message_id": new_message.id}
     
     except Exception as e:
         print(f"[ERROR] Unexpected error in add_chats: {e}")

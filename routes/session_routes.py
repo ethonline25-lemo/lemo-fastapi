@@ -1,6 +1,6 @@
 # routes/sessions.py
 from fastapi import APIRouter, Request, Depends
-from controller.sessions import save_message, create_session, get_session, get_all_sessions
+from controllers.sessions import save_message, create_session, get_session, get_all_sessions
 from dependencies.auth import get_current_user  # Changed import
 
 router = APIRouter()
