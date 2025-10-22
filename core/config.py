@@ -9,4 +9,5 @@ class LLMKeys:
     gemini: str = os.getenv("GEMINI_API_KEY")
     # Add more keys here
 
+REDIS_URL = os.getenv("REDIS_URL")
 llm_keys = LLMKeys()
