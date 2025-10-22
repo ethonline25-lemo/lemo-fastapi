@@ -60,8 +60,11 @@ async def query_handler(request: Request):
         res = None
         
         if intent.intent == "ask":
-            print(f"[LOG] Processing 'ask' intent with scope: {intent.scope}")
-            answer = asking(user_query, domain, current_page_url, intent.scope, session_id)
+            if intent.scope == "chat_history":
+                answer = intent.message_forward.summary
+            else:
+                print(f"[LOG] Processing 'ask' intent with scope: {intent.scope}")
+                answer = asking(user_query, domain, current_page_url, intent.scope, session_id)
             print(f"[LOG] Got answer: {answer[:100] if answer else 'None'}...")
             res = JSONResponse(content={"answer": answer}, status_code=200)
         else:
