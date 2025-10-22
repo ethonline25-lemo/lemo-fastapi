@@ -15,7 +15,18 @@ asking_llm = ChatGoogleGenerativeAI(
 
 def current_page_asking(user_query: str, current_page_url: str):
     context = current_page_context(current_page_url, user_query)
-    prompt = currentpage_asking_prompt(context.join("\n"))
+    
+    # Handle different context types
+    if isinstance(context, list) and len(context) > 0:
+        # Extract only the content from tuples (content, score)
+        context_strings = [item[0] if isinstance(item, tuple) else item for item in context]
+        context_text = "\n".join(context_strings)
+    elif isinstance(context, list) and len(context) == 0:
+        context_text = "No relevant context found for this page."
+    else:
+        context_text = str(context) if context else "No context available."
+    
+    prompt = currentpage_asking_prompt(context_text)
     messages = [SystemMessage(content=prompt), HumanMessage(content=user_query)]
     response = asking_llm.invoke(messages)
     return response.content
