@@ -43,13 +43,16 @@ def intent_detection(user_query: str,session_id: str):
     structured_llm = llm.with_structured_output(IntentOutput)
     chat_history = get_chat_history(session_id)
     messages = []
-    if chat_history:
+    
+    # Add chat history to messages for context
+    if chat_history and len(chat_history) > 0:
         for message in chat_history:
-            if message["message_type"] == "user":
-                messages.append(HumanMessage(content=message["message"]))
+            if message.get("message_type") == "user":
+                messages.append(HumanMessage(content=message.get("message", "")))
             else:
-                messages.append(SystemMessage(content=message["message"]))
+                messages.append(SystemMessage(content=message.get("message", "")))
 
+    # Add system prompt and user input
     messages.append(SystemMessage(content=intent_detection_prompt))
     messages.append(HumanMessage(content=user_input))
 

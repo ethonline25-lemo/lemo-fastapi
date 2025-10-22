@@ -37,7 +37,7 @@ def current_page_context(url: str, query: str):
         print("[LOG] Query embedding generated")
         
         print("[LOG] Searching for relevant content...")
-        content = get_relevant_content(url, query_embedding, top_k=2)
+        content = get_relevant_content(url, query_embedding, top_k=5)
         print(f"[LOG] Found {len(content)} relevant content chunks")
         
         return content

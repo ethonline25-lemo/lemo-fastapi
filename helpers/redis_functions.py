@@ -258,7 +258,7 @@ def get_relevant_content(url: str, query_embedding: List[float], top_k: int = 3)
 
 
 # Get chat history based on session_id
-def get_chat_history(session_id: str) -> Optional[List[Dict[str, Any]]]:
+def get_chat_history(session_id: str) -> List[Dict[str, Any]]:
     """
     Get chat history for a session.
     
@@ -266,15 +266,15 @@ def get_chat_history(session_id: str) -> Optional[List[Dict[str, Any]]]:
         session_id: The session identifier
         
     Returns:
-        List of message dictionaries or None if not found
+        List of message dictionaries (empty list if not found)
     """
     try:
         key = f"chat:{session_id}:messages"
         messages_json = r.get(key)
         
         if not messages_json:
-            print(f"[WARNING] No chat history found for session: {session_id}")
-            return None
+            print(f"[INFO] No chat history found for session: {session_id} (starting fresh)")
+            return []
         
         # Decode if bytes
         if isinstance(messages_json, bytes):
@@ -286,8 +286,38 @@ def get_chat_history(session_id: str) -> Optional[List[Dict[str, Any]]]:
     
     except Exception as e:
         print(f"[ERROR] Failed to get chat history: {e}")
-        return None
+        return []
 
+
+# Delete chat history based on session_id
+def delete_chat_history(session_id: str) -> Dict[str, Any]:
+    """
+    Delete chat history for a session.
+    
+    Args:
+        session_id: The session identifier
+        
+    Returns:
+        Dict with status and message
+    """
+    try:
+        key = f"chat:{session_id}:messages"
+        session_key = f"chat:{session_id}:last_activity"
+        
+        # Delete both the messages and last activity keys
+        deleted_messages = r.delete(key)
+        deleted_activity = r.delete(session_key)
+        
+        if deleted_messages or deleted_activity:
+            print(f"[LOG] Deleted chat history for session {session_id}")
+            return {"status": "success", "message": f"Chat history deleted for session {session_id}"}
+        else:
+            print(f"[WARNING] No chat history found to delete for session: {session_id}")
+            return {"status": "warning", "message": f"No chat history found for session {session_id}"}
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to delete chat history: {e}")
+        return {"status": "error", "message": f"Failed to delete chat history: {str(e)}"}
 
 # Store chat history based on session_id
 def store_chat_history(session_id: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -352,8 +382,8 @@ def add_message_to_chat(
         if message_type not in ["user", "assistant", "system"]:
             return {"status": "error", "message": f"Invalid message_type: {message_type}. Must be user/assistant/system"}
         
-        # Get existing messages or create new list
-        messages = get_chat_history(session_id) or []
+        # Get existing messages (returns empty list if none found)
+        messages = get_chat_history(session_id)
         
         # Create new message
         new_message = {

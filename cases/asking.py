@@ -14,35 +14,59 @@ asking_llm = ChatGoogleGenerativeAI(
 
 
 def current_page_asking(user_query: str, current_page_url: str):
-    context = current_page_context(current_page_url, user_query)
+    try:
+        print(f"[LOG] current_page_asking called for URL: {current_page_url}")
+        context = current_page_context(current_page_url, user_query)
+        
+        # Handle different context types
+        if isinstance(context, list) and len(context) > 0:
+            # Extract only the content from tuples (content, score)
+            context_strings = [item[0] if isinstance(item, tuple) else item for item in context]
+            context_text = "\n".join(context_strings)
+            print(f"[LOG] Using {len(context_strings)} context chunks")
+        elif isinstance(context, list) and len(context) == 0:
+            context_text = "No relevant context found for this page."
+            print("[WARNING] No context found for the page")
+        else:
+            context_text = str(context) if context else "No context available."
+            print(f"[WARNING] Unexpected context type: {type(context)}")
+        
+        prompt = currentpage_asking_prompt(context_text)
+        messages = [SystemMessage(content=prompt), HumanMessage(content=user_query)]
+        response = asking_llm.invoke(messages)
+        
+        answer = response.content if response and response.content else "I couldn't generate a response. Please try again."
+        print(f"[LOG] Generated answer: {answer[:100]}...")
+        return answer
     
-    # Handle different context types
-    if isinstance(context, list) and len(context) > 0:
-        # Extract only the content from tuples (content, score)
-        context_strings = [item[0] if isinstance(item, tuple) else item for item in context]
-        context_text = "\n".join(context_strings)
-    elif isinstance(context, list) and len(context) == 0:
-        context_text = "No relevant context found for this page."
-    else:
-        context_text = str(context) if context else "No context available."
-    
-    prompt = currentpage_asking_prompt(context_text)
-    messages = [SystemMessage(content=prompt), HumanMessage(content=user_query)]
-    response = asking_llm.invoke(messages)
-    return response.content
+    except Exception as e:
+        print(f"[ERROR] Error in current_page_asking: {e}")
+        import traceback
+        traceback.print_exc()
+        return "I encountered an error while processing your question. Please try again."
 
 def product_asking(user_query: str, domain: str):
-    pass
+    print(f"[LOG] product_asking called with domain: {domain}")
+    # For now, treat product questions as current page questions
+    # TODO: Implement proper product-specific logic
+    return "I apologize, but I need more context to answer product-specific questions. Please ask about the current page you're viewing."
 
-def chat_history_asking(user_query: str,session_id: str):
-    pass
+def chat_history_asking(user_query: str, session_id: str):
+    print(f"[LOG] chat_history_asking called for session: {session_id}")
+    # TODO: Implement chat history search
+    return "I apologize, but I cannot search through chat history yet. Please ask about the current page you're viewing."
 
-def asking(user_query: str, domain: str, current_page_url: str,scope: str,session_id: str):
+def asking(user_query: str, domain: str, current_page_url: str, scope: str, session_id: str):
+    print(f"[LOG] asking() called with scope: {scope}")
+    
     if scope == "current_page":
         return current_page_asking(user_query, current_page_url)
     elif scope == "product":
-        return product_asking(user_query, domain)
+        # For product questions, still use current page context as fallback
+        print(f"[LOG] Product scope detected, using current_page_asking as fallback")
+        return current_page_asking(user_query, current_page_url)
     elif scope == "chat_history":
         return chat_history_asking(user_query, session_id)
     else:
-        return "Unknown scope"
+        print(f"[WARNING] Unknown scope: {scope}, using current_page_asking as fallback")
+        return current_page_asking(user_query, current_page_url)
