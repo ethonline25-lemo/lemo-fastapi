@@ -8,7 +8,9 @@ SITE_PATTERNS = {
     'ajio.com': {'sp_check': lambda url: '/p/' in url},
     'nykaafashion.com': {'sp_check': lambda url: '/p/' in url},
     'amazon.in': {'sp_check': lambda url: '/dp/' in url},
-    'flipkart.com': {'sp_check': lambda url: '/p/' in url}
+    'flipkart.com': {'sp_check': lambda url: '/p/' in url},
+    'allensolly.abfrl.in': {'sp_check': lambda url: '/p/' in url}
+
     # Add more sites here
 }
 
@@ -91,8 +93,5 @@ def browser(query, site=None, limit=10, scrape_lp=True):
     return {
         "success": True if product_pages else False,
         "message": "URLs fetched successfully" if product_pages else "No product URLs found",
-        "urls": product_pages[:limit]
+        "urls": list(product_pages)[:limit]
     }
-
-data = browser("shoes for men", "myntra.com", 10)
-print(data)
