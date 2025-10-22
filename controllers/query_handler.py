@@ -14,7 +14,7 @@ async def query_handler(request: Request):
         if not session_id or not user_id:
             return JSONResponse(content={"message": "Session ID or User ID is required"}, status_code=401)
         
-        session_details = get_session_details(session_id, user_id)
+        session_details = await get_session_details(session_id, user_id)
         user_query = body.get("user_query")
         
         if not user_query:
@@ -73,9 +73,9 @@ async def query_handler(request: Request):
             res = JSONResponse(content={"message": "Intent not recognized", "intent": intent.intent, "answer": answer}, status_code=200)
     
         # Add messages to both DB and Redis
-        add_chats(session_id, user_query, "user", intent.intent, user_id)
+        await add_chats(session_id, user_query, "user", intent.intent, user_id)
         if answer:
-            add_chats(session_id, answer, "assistant", intent.intent, user_id)
+            await add_chats(session_id, answer, "assistant", intent.intent, user_id)
         
         return res
     
