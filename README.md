@@ -1,6 +1,6 @@
 # LEMO Backend
 
-LEMO is a backend service built using FastAPI, providing endpoints for session management, authentication, chat messaging, and advanced product and page context recommendations using modern machine learning models.
+This Repo is backend service built using FastAPI, providing endpoints for session management, authentication, chat messaging, and advanced product and page context recommendations using modern machine learning models.
 
 ---
 
