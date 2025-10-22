@@ -26,7 +26,7 @@ Follow the steps below to set up and launch LEMO Backend on your machine.
 ### 1. Clone the Repository
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/ethonline25-lemo/lemo-fastapi.git
 cd lemo-fastapi
 ```
 
