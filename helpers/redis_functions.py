@@ -1,8 +1,10 @@
 import redis
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any, Optional
 from core.config import REDIS_URL
 import hashlib
+import json
+from datetime import datetime
 
 VECTOR_DIM = 384  # embedding dimension
 
@@ -26,7 +28,7 @@ def create_redis_index():
         return {"status": "error", "message": str(e)}
 
 
-# 1️⃣ Store a vector embedding for a URL
+#  Store a vector embedding for a URL
 def store_vector(url: str, embedding: List[float]):
     """Store a document URL with its vector embedding in Redis."""
     if len(embedding) != VECTOR_DIM:
@@ -54,7 +56,7 @@ def store_vector(url: str, embedding: List[float]):
         return {"status": "error", "message": f"Failed to store vector: {str(e)}"}
 
 
-# 2️⃣ Search for similar URLs based on a query embedding
+# Search for similar URLs based on a query embedding
 def search_similar(query_embedding: List[float], top_k: int = 5) -> List[Tuple[str, float]]:
     """
     Search for similar documents using cosine similarity.
@@ -128,81 +130,7 @@ def search_similar(query_embedding: List[float], top_k: int = 5) -> List[Tuple[s
         return []
 
 
-# 3️⃣ Delete a vector by URL
-def delete_vector(url: str):
-    """Delete a document vector from Redis."""
-    url_hash = hashlib.md5(url.encode()).hexdigest()
-    key = f"doc:{url_hash}"
-    
-    try:
-        # Remove from the set
-        r.srem("doc_keys", key)
-        # Delete the hash
-        result = r.delete(key)
-        if result:
-            return {"status": "success", "message": f"Deleted vector for {url}"}
-        else:
-            return {"status": "error", "message": f"No vector found for {url}"}
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to delete vector: {str(e)}"}
-
-
-# 4️⃣ Check storage stats
-def get_storage_stats():
-    """Get information about the stored documents."""
-    try:
-        doc_keys = r.smembers("doc_keys")
-        count = len(doc_keys) if doc_keys else 0
-        return {"status": "success", "document_count": count}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-# 5️⃣ List all stored documents
-def list_all_documents():
-    """List all stored document URLs."""
-    try:
-        doc_keys = r.smembers("doc_keys")
-        urls = []
-        
-        for key in doc_keys:
-            if isinstance(key, bytes):
-                key = key.decode('utf-8')
-            
-            doc_data = r.hgetall(key)
-            if doc_data and b'url' in doc_data:
-                url = doc_data[b'url'].decode('utf-8') if isinstance(doc_data[b'url'], bytes) else doc_data[b'url']
-                urls.append(url)
-        
-        return {"status": "success", "documents": urls, "count": len(urls)}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-# 6️⃣ Clear all documents (useful for testing)
-def clear_all_documents():
-    """Delete all stored documents."""
-    try:
-        doc_keys = r.smembers("doc_keys")
-        
-        if doc_keys:
-            # Delete all document hashes
-            for key in doc_keys:
-                if isinstance(key, bytes):
-                    key = key.decode('utf-8')
-                r.delete(key)
-            
-            # Clear the set
-            r.delete("doc_keys")
-            
-            return {"status": "success", "message": f"Deleted {len(doc_keys)} documents"}
-        else:
-            return {"status": "success", "message": "No documents to delete"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-# 7️⃣ Store page vector data (content chunks with embeddings)
+# Store page vector data (content chunks with embeddings)
 def store_page_vector(url: str, content: str, embedding: List[float]):
     """
     Store page content with its vector embedding.
@@ -247,7 +175,7 @@ def store_page_vector(url: str, content: str, embedding: List[float]):
         return {"status": "error", "message": f"Failed to store page vector: {str(e)}"}
 
 
-# 8️⃣ Get relevant content for a URL based on query embedding
+# Get relevant content for a URL based on query embedding
 def get_relevant_content(url: str, query_embedding: List[float], top_k: int = 3) -> List[Tuple[str, float]]:
     """
     Get the most relevant content chunks for a specific URL based on query similarity.
@@ -327,3 +255,124 @@ def get_relevant_content(url: str, query_embedding: List[float], top_k: int = 3)
         import traceback
         traceback.print_exc()
         return []
+
+
+# Get chat history based on session_id
+def get_chat_history(session_id: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Get chat history for a session.
+    
+    Args:
+        session_id: The session identifier
+        
+    Returns:
+        List of message dictionaries or None if not found
+    """
+    try:
+        key = f"chat:{session_id}:messages"
+        messages_json = r.get(key)
+        
+        if not messages_json:
+            print(f"[WARNING] No chat history found for session: {session_id}")
+            return None
+        
+        # Decode if bytes
+        if isinstance(messages_json, bytes):
+            messages_json = messages_json.decode('utf-8')
+        
+        messages = json.loads(messages_json)
+        print(f"[LOG] Retrieved {len(messages)} messages for session {session_id}")
+        return messages
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to get chat history: {e}")
+        return None
+
+
+# Store chat history based on session_id
+def store_chat_history(session_id: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Store complete chat history for a session.
+    
+    Args:
+        session_id: The session identifier
+        messages: List of message dictionaries with keys:
+                 - message: str
+                 - message_type: str (user/assistant/system)
+                 - detected_intent: Optional[str]
+                 - created_at: Optional[str] (auto-added if not present)
+        
+    Returns:
+        Dict with status and message
+    """
+    try:
+        # Add timestamps if not present
+        for msg in messages:
+            if "created_at" not in msg or not msg["created_at"]:
+                msg["created_at"] = datetime.utcnow().isoformat()
+        
+        key = f"chat:{session_id}:messages"
+        messages_json = json.dumps(messages)
+        
+        r.set(key, messages_json)
+        
+        # Update session last activity
+        session_key = f"chat:{session_id}:last_activity"
+        r.set(session_key, datetime.utcnow().isoformat())
+        
+        print(f"[LOG] Stored {len(messages)} messages for session {session_id}")
+        return {"status": "success", "message": f"Stored {len(messages)} messages", "session_id": session_id}
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to store chat history: {e}")
+        return {"status": "error", "message": f"Failed to store chat history: {str(e)}"}
+
+
+# Add a message to chat
+def add_message_to_chat(
+    session_id: str,
+    message: str,
+    message_type: str,
+    detected_intent: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Add a single message to chat history.
+    
+    Args:
+        session_id: The session identifier
+        message: Message content
+        message_type: Type of message (user/assistant/system)
+        detected_intent: Detected intent (optional)
+        
+    Returns:
+        Dict with status, message, and the added message object
+    """
+    try:
+        # Validate message_type
+        if message_type not in ["user", "assistant", "system"]:
+            return {"status": "error", "message": f"Invalid message_type: {message_type}. Must be user/assistant/system"}
+        
+        # Get existing messages or create new list
+        messages = get_chat_history(session_id) or []
+        
+        # Create new message
+        new_message = {
+            "message": message,
+            "message_type": message_type,
+            "detected_intent": detected_intent,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        # Append and save
+        messages.append(new_message)
+        result = store_chat_history(session_id, messages)
+        
+        if result["status"] == "success":
+            print(f"[LOG] Added {message_type} message to session {session_id}")
+            return {"status": "success", "message": "Message added", "added_message": new_message}
+        else:
+            return result
+    
+    except Exception as e:
+        print(f"[ERROR] Failed to add message: {e}")
+        return {"status": "error", "message": f"Failed to add message: {str(e)}"}

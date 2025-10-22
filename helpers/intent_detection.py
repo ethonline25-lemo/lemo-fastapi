@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from prompts.intent_detection import intent_detection_prompt
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, Dict, Any
-
+from helpers.redis_functions import get_chat_history
 
 # Define the output schema using Pydantic
 class MessageForward(BaseModel):
@@ -25,42 +25,35 @@ class IntentOutput(BaseModel):
     message_forward: MessageForward = Field(description="Summary and details of the user message")
     follow_up_questions: str = Field(description="Suggested follow-up questions for the user")
 
+def intent_detection(user_query: str,session_id: str):
+    # Get user input
+    user_input = user_query
 
-# Get user input
-user_input = input("Enter your input: ")
+    # Initialize the Gemini Model
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.7,
+        max_tokens=None,
+        timeout=None,
+        max_retries=2,
+        api_key=llm_keys.gemini
+    )
 
-# Initialize the Gemini Model
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    temperature=0.7,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2,
-    api_key=llm_keys.gemini
-)
+    # Apply structured output to the model
+    structured_llm = llm.with_structured_output(IntentOutput)
+    chat_history = get_chat_history(session_id)
+    messages = []
+    if chat_history:
+        for message in chat_history:
+            if message["message_type"] == "user":
+                messages.append(HumanMessage(content=message["message"]))
+            else:
+                messages.append(SystemMessage(content=message["message"]))
 
-# Apply structured output to the model
-structured_llm = llm.with_structured_output(IntentOutput)
+    messages.append(SystemMessage(content=intent_detection_prompt))
+    messages.append(HumanMessage(content=user_input))
 
-# Create messages with System (instruction) and User prompts
-messages = [
-    SystemMessage(content=intent_detection_prompt),
-    HumanMessage(content=user_input)
-]
+    # Invoke the model and get structured output
+    response = structured_llm.invoke(messages)
 
-# Invoke the model and get structured output
-response = structured_llm.invoke(messages)
-
-# Display the output
-print("\n=== Structured Output ===")
-print(f"Intent: {response.intent}")
-print(f"Scope: {response.scope}")
-print(f"Confidence: {response.intent_confidence}")
-print(f"Summary: {response.message_forward.summary}")
-print(f"Details: {response.message_forward.details}")
-print(f"Follow-up: {response.follow_up_questions}")
-
-# Convert to JSON dict
-print("\n=== JSON Output ===")
-import json
-print(json.dumps(response.model_dump(), indent=2))
+    return response

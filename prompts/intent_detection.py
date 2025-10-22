@@ -17,7 +17,7 @@ RULES:
 1. Output only valid JSON. No markdown, commentary, or code fences.
 2. intent: classify whether the user is asking for info (ask), performing an action (todo), or unclear (unknown).
 3. scope: choose the main domain of the request (product, current_page, cart, order, wishlist, account, chat_history, unknown).
-4. message_forward.summary: concise, human-readable summary of what the user wants.
+4. message_forward.summary: concise, to the point summary of what the user wants.as i will use this summary to generate the prompt for the asking model, so it should be very specific and to the point.
 5. message_forward.details: structured fields relevant to that summary (e.g., action type, product name, filters, size, etc.). Don't assume anything by your own assumption, only use the information provided in the user's input and the context of the conversation.
 6. If not enough info, fill unknowns with null or ask short follow-up questions.
 7. Confidence is a float 0–1.

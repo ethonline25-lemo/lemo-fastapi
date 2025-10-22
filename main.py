@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import Response
 import requests
-
+from controllers.query_handler import query_handler
 app = FastAPI()
 
 app.add_middleware(
@@ -18,6 +18,10 @@ app.add_middleware(
 @app.get("/")
 async def get():
     return {"message": "Hello, World!"}
+
+@app.post("/query")
+async def query(request: Request):
+    return await query_handler(request)
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
 async def reverse_proxy(path: str, request: Request):
