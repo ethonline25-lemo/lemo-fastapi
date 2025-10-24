@@ -5,6 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from prompts.currentpage_asking import currentpage_asking_prompt
 from prompts.product_recommendation_prompt import product_recommendation_prompt
+from prompts.chat_history_responce_prompt import chat_history_response_prompt
 asking_llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     temperature=0.7,
@@ -66,12 +67,15 @@ def product_asking(user_query: str, domain: str):
         traceback.print_exc()
         return "I encountered an error while processing your product question. Please try again."
 
-def chat_history_asking(user_query: str, session_id: str):
-    print(f"[LOG] chat_history_asking called for session: {session_id}")
-    # TODO: Implement chat history search
-    return "I apologize, but I cannot search through chat history yet. Please ask about the current page you're viewing."
+def chat_history_asking(user_query: str, chat_history: str):
+    prompt = chat_history_response_prompt(user_query, chat_history)
+    messages = [SystemMessage(content=prompt), HumanMessage(content=user_query)]
+    response = asking_llm.invoke(messages)
+    answer = response.content if response and response.content else "I couldn't generate a response. Please try again."
+    print(f"[LOG] Generated answer: {answer[:100]}...")
+    return answer
 
-def asking(user_query: str, domain: str, current_page_url: str, scope: str, session_id: str):
+def asking(user_query: str, domain: str, current_page_url: str, scope: str, session_id: str, chat_history: str):
     print(f"[LOG] asking() called with scope: {scope}")
     
     if scope == "current_page":

@@ -29,18 +29,15 @@ async def query_handler(request: Request):
         # Detect intent
         intent = intent_detection(user_query)
         print(f"[LOG] Detected intent: {intent.intent}, scope: {intent.scope}, message_forward: {intent.message_forward}")
-        return intent
         
         # Process based on intent
         answer = None
         res = None
         
         if intent.intent == "ask":
-            if intent.scope == "chat_history":
-                answer = intent.message_forward
-            else:
-                print(f"[LOG] Processing 'ask' intent with scope: {intent.scope}")
-                answer = asking(intent.message_forward, domain, current_page_url, intent.scope, session_id)
+            print(f"[LOG] Processing 'ask' intent with scope: {intent.scope}")
+            chat_history = "\n".join([f"{msg.get('message_type')}: {msg.get('message')}" for msg in session_details.get("chat_messages")])
+            answer = asking(intent.message_forward, domain, current_page_url, intent.scope, session_id, chat_history)
             print(f"[LOG] Got answer: {answer[:100] if answer else 'None'}...")
             res = JSONResponse(content={"answer": answer}, status_code=200)
         else:
