@@ -1,6 +1,6 @@
 # LEMO Backend
 
-LEMO is a backend service built using FastAPI, providing endpoints for session management, authentication, chat messaging, and advanced product and page context recommendations using modern machine learning models.
+This Repo is backend service built using FastAPI, providing endpoints for session management, authentication, chat messaging, and advanced product and page context recommendations using modern machine learning models.
 
 ---
 
@@ -26,7 +26,7 @@ Follow the steps below to set up and launch LEMO Backend on your machine.
 ### 1. Clone the Repository
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/ethonline25-lemo/lemo-fastapi.git
 cd lemo-fastapi
 ```
 
