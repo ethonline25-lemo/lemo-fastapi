@@ -7,25 +7,16 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from prompts.intent_detection import intent_detection_prompt
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, Dict, Any
-from helpers.redis_functions import get_chat_history
-
-# Define the output schema using Pydantic
-class MessageForward(BaseModel):
-    """Details about the user's message."""
-    summary: str = Field(description="Short description of what the user wants")
-    details: Dict[str, Any] = Field(default_factory=dict, description="Additional details")
+from typing import Literal
 
 
 class IntentOutput(BaseModel):
     """Structured output for intent detection."""
     intent: Literal["ask", "todo", "unknown"] = Field(description="The intent type")
     scope: Literal["current_page", "product", "cart", "order", "wishlist", "account", "chat_history", "unknown"] = Field(description="The scope of the intent")
-    intent_confidence: float = Field(description="Confidence score between 0 and 1")
-    message_forward: MessageForward = Field(description="Summary and details of the user message")
-    follow_up_questions: str = Field(description="Suggested follow-up questions for the user")
+    message_forward: str = Field(description="String that will be passed to the next AI agent")
 
-def intent_detection(user_query: str,session_id: str):
+def intent_detection(user_query: str):
     # Get user input
     user_input = user_query
 
@@ -41,16 +32,7 @@ def intent_detection(user_query: str,session_id: str):
 
     # Apply structured output to the model
     structured_llm = llm.with_structured_output(IntentOutput)
-    chat_history = get_chat_history(session_id)
     messages = []
-    
-    # Add chat history to messages for context
-    if chat_history and len(chat_history) > 0:
-        for message in chat_history:
-            if message.get("message_type") == "user":
-                messages.append(HumanMessage(content=message.get("message", "")))
-            else:
-                messages.append(SystemMessage(content=message.get("message", "")))
 
     # Add system prompt and user input
     messages.append(SystemMessage(content=intent_detection_prompt))
