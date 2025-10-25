@@ -17,7 +17,26 @@ asking_llm = ChatGoogleGenerativeAI(
 
 def current_page_asking(user_query: str, current_page_url: str):
     try:
-        print(f"[LOG] current_page_asking called for URL: {current_page_url}")
+        print(f"\n{'='*80}")
+        print(f"[ASKING] Processing query: {user_query}")
+        print(f"[ASKING] Current URL: {current_page_url}")
+        print(f"{'='*80}\n")
+        
+        # Check if it's a browser-internal page
+        non_scrapable_schemes = ['chrome://', 'chrome-extension://', 'about:', 'file://', 'data:', 'javascript:', 'edge://', 'brave://']
+        is_non_scrapable = any(current_page_url.lower().startswith(scheme) for scheme in non_scrapable_schemes)
+        
+        if is_non_scrapable:
+            print(f"[ASKING] ✗ Browser-internal page detected: {current_page_url}")
+            print(f"[ASKING] Returning helpful message to user")
+            return (
+                "I can't analyze browser-internal pages like new tabs or extension pages. "
+                "Please navigate to an e-commerce product page (Amazon, Flipkart, etc.) "
+                "and I'll be happy to help you analyze the product! 🛍️"
+            )
+        
+        # TRY METHOD 1: Vector embeddings with Redis
+        print(f"[ASKING] Attempting Method 1: Vector embeddings...")
         context = current_page_context(current_page_url, user_query)
         
         # Handle different context types
@@ -25,20 +44,46 @@ def current_page_asking(user_query: str, current_page_url: str):
             # Extract only the content from tuples (content, score)
             context_strings = [item[0] if isinstance(item, tuple) else item for item in context]
             context_text = "\n".join(context_strings)
-            print(f"[LOG] Using {len(context_strings)} context chunks")
+            print(f"[ASKING] ✓✓✓ Method 1 SUCCESS: Using {len(context_strings)} embedding chunks")
         elif isinstance(context, list) and len(context) == 0:
-            context_text = "No relevant context found for this page."
-            print("[WARNING] No context found for the page")
+            # METHOD 2: Direct scraping fallback
+            print(f"[ASKING] ✗ Method 1 FAILED: No embeddings found")
+            print(f"[ASKING] Attempting Method 2: Direct scraping fallback...")
+            
+            try:
+                from helpers.web_scrapper import web_scrapper
+                direct_chunks = web_scrapper(current_page_url, full_page=True)
+                
+                if direct_chunks and len(direct_chunks) > 0:
+                    # Use first 5 chunks for analysis
+                    context_text = "\n\n".join(direct_chunks[:5])
+                    print(f"[ASKING] ✓✓✓ Method 2 SUCCESS: Using {min(5, len(direct_chunks))} direct chunks ({len(context_text)} chars)")
+                else:
+                    print(f"[ASKING] ✗✗✗ Method 2 FAILED: Could not scrape page")
+                    context_text = "ERROR: Unable to extract any information from this page. The page may be blocking automated access."
+            except Exception as scrape_error:
+                print(f"[ASKING] ✗✗✗ Method 2 CRITICAL ERROR: {scrape_error}")
+                import traceback
+                traceback.print_exc()
+                context_text = f"ERROR: Failed to access page content due to: {str(scrape_error)}"
         else:
             context_text = str(context) if context else "No context available."
-            print(f"[WARNING] Unexpected context type: {type(context)}")
+            print(f"[ASKING] ⚠ Unexpected context type: {type(context)}")
+        
+        print(f"[ASKING] Building prompt with context length: {len(context_text)} characters")
+        print(f"[ASKING] Context preview: {context_text[:300]}...")
         
         prompt = currentpage_asking_prompt(context_text)
         messages = [SystemMessage(content=prompt), HumanMessage(content=user_query)]
+        
+        print(f"[ASKING] Sending to Gemini AI...")
         response = asking_llm.invoke(messages)
         
         answer = response.content if response and response.content else "I couldn't generate a response. Please try again."
-        print(f"[LOG] Generated answer: {answer[:100]}...")
+        print(f"[ASKING] ✓✓✓ AI Response received: {len(answer)} characters")
+        print(f"[ASKING] Response preview: {answer[:200]}...")
+        print(f"{'='*80}\n")
+        
         return answer
     
     except Exception as e:
