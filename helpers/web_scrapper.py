@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import re
 
 def web_scrapper(url: str, full_page: bool = False):
     try:
@@ -73,88 +74,184 @@ def web_scrapper(url: str, full_page: bool = False):
             if not title_found:
                 print(f"[SCRAPER] ✗ No title found")
             
-            # Price extraction (multiple strategies)
+            # UNIVERSAL Price extraction (works on ANY e-commerce site)
             price_found = False
             
-            # Strategy 1: Find a-price span with whole number
+            # Strategy 1: Universal regex pattern for prices
             try:
-                price_container = soup.find('span', {'class': 'a-price'})
-                if price_container:
-                    whole = price_container.find('span', {'class': 'a-price-whole'})
-                    fraction = price_container.find('span', {'class': 'a-price-fraction'})
-                    symbol = price_container.find('span', {'class': 'a-price-symbol'})
-                    
-                    if whole:
-                        price_text = ''
-                        if symbol:
-                            price_text += symbol.get_text(strip=True)
-                        price_text += whole.get_text(strip=True)
-                        if fraction:
-                            price_text += fraction.get_text(strip=True)
-                        
-                        if price_text and any(char.isdigit() for char in price_text):
-                            product_data.append(f"PRICE: {price_text}")
-                            print(f"[SCRAPER] ✓ Found price (Strategy 1): {price_text}")
+                # Enhanced pattern to catch ₹41,990, $299.99, etc.
+                price_pattern = re.compile(r'[₹$€£]\s*[\d,]+(?:\.\d{2})?')
+                
+                # Search in ALL text content
+                page_text = soup.get_text()
+                price_matches = price_pattern.findall(page_text)
+                
+                if price_matches:
+                    # Get the most likely price (usually the first/largest one)
+                    for price_match in price_matches[:3]:  # Check first 3 matches
+                        # Clean up the price
+                        clean_price = price_match.strip()
+                        if len(clean_price) > 3:  # Must be substantial price
+                            product_data.append(f"PRICE: {clean_price}")
+                            print(f"[SCRAPER] ✓ Found price (Universal Strategy 1): {clean_price}")
                             price_found = True
+                            break
             except Exception as e:
-                print(f"[SCRAPER] Price Strategy 1 failed: {e}")
+                print(f"[SCRAPER] Universal Price Strategy 1 failed: {e}")
             
-            # Strategy 2: Find any element with price-related text
+            # Strategy 2: Amazon-specific selectors
             if not price_found:
                 try:
-                    # Look for elements containing currency symbols and numbers
-                    import re
-                    price_pattern = re.compile(r'[₹$€£]\s*[\d,]+\.?\d*')
+                    price_container = soup.find('span', {'class': 'a-price'})
+                    if price_container:
+                        whole = price_container.find('span', {'class': 'a-price-whole'})
+                        fraction = price_container.find('span', {'class': 'a-price-fraction'})
+                        symbol = price_container.find('span', {'class': 'a-price-symbol'})
+                        
+                        if whole:
+                            price_text = ''
+                            if symbol:
+                                price_text += symbol.get_text(strip=True)
+                            price_text += whole.get_text(strip=True)
+                            if fraction:
+                                price_text += fraction.get_text(strip=True)
+                            
+                            if price_text and any(char.isdigit() for char in price_text):
+                                product_data.append(f"PRICE: {price_text}")
+                                print(f"[SCRAPER] ✓ Found price (Amazon Strategy): {price_text}")
+                                price_found = True
+                except Exception as e:
+                    print(f"[SCRAPER] Amazon Price Strategy failed: {e}")
+            
+            # Strategy 3: Flipkart-specific selectors
+            if not price_found:
+                try:
+                    flipkart_selectors = [
+                        {'class': '_30jeq3'},  # Flipkart price class
+                        {'class': '_1vC4OE'},  # Another Flipkart price class
+                        {'class': 'price'},   # Generic price class
+                    ]
                     
-                    # Check common price containers
-                    price_areas = soup.find_all(['span', 'div'], string=price_pattern)
-                    for elem in price_areas[:5]:  # Check first 5 matches
-                        price_text = elem.get_text(strip=True)
-                        if price_pattern.search(price_text):
-                            # Extract just the price part
-                            match = price_pattern.search(price_text)
-                            if match:
-                                product_data.append(f"PRICE: {match.group()}")
-                                print(f"[SCRAPER] ✓ Found price (Strategy 2): {match.group()}")
+                    for selector in flipkart_selectors:
+                        price_elem = soup.find(['span', 'div'], selector)
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            if price_text and any(char.isdigit() for char in price_text):
+                                product_data.append(f"PRICE: {price_text}")
+                                print(f"[SCRAPER] ✓ Found price (Flipkart Strategy): {price_text}")
                                 price_found = True
                                 break
                 except Exception as e:
-                    print(f"[SCRAPER] Price Strategy 2 failed: {e}")
+                    print(f"[SCRAPER] Flipkart Price Strategy failed: {e}")
             
-            # Strategy 3: Look in specific IDs
+            # Strategy 4: Look in specific IDs and data attributes
             if not price_found:
-                price_ids = ['priceblock_ourprice', 'priceblock_dealprice', 'price', 'tp_price_block_total_price_ww']
-                for price_id in price_ids:
-                    price_elem = soup.find(id=price_id)
-                    if price_elem:
-                        price_text = price_elem.get_text(strip=True)
-                        if price_text and any(char.isdigit() for char in price_text):
+                try:
+                    price_selectors = [
+                        {'id': 'priceblock_ourprice'},  # Amazon
+                        {'id': 'priceblock_dealprice'},  # Amazon
+                        {'id': 'price'},                 # Generic
+                        {'id': 'tp_price_block_total_price_ww'},  # Amazon
+                        {'data-testid': 'price'},        # Generic
+                        {'class': 'product-price'},      # Generic
+                        {'class': 'current-price'},      # Generic
+                    ]
+                    
+                    for selector in price_selectors:
+                        price_elem = soup.find(['span', 'div', 'p'], selector)
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            if price_text and any(char.isdigit() for char in price_text):
+                                product_data.append(f"PRICE: {price_text}")
+                                print(f"[SCRAPER] ✓ Found price (ID Strategy): {price_text}")
+                                price_found = True
+                                break
+                except Exception as e:
+                    print(f"[SCRAPER] ID Price Strategy failed: {e}")
+            
+            # Strategy 5: Text-based search for price patterns
+            if not price_found:
+                try:
+                    # Look for text containing "₹" or "$" followed by numbers
+                    price_elements = soup.find_all(text=re.compile(r'[₹$€£]\s*[\d,]+'))
+                    for elem in price_elements[:5]:  # Check first 5 matches
+                        price_text = elem.strip()
+                        if len(price_text) > 3 and any(char.isdigit() for char in price_text):
                             product_data.append(f"PRICE: {price_text}")
-                            print(f"[SCRAPER] ✓ Found price (Strategy 3 - {price_id}): {price_text}")
+                            print(f"[SCRAPER] ✓ Found price (Text Strategy): {price_text}")
                             price_found = True
                             break
+                except Exception as e:
+                    print(f"[SCRAPER] Text Price Strategy failed: {e}")
             
             if not price_found:
-                print(f"[SCRAPER] ✗ No price found (tried all strategies)")
+                print(f"[SCRAPER] ✗ No price found (tried all 5 strategies)")
+                print(f"[SCRAPER] Page text sample: {soup.get_text()[:500]}...")
             
-            # Discount extraction
+            # UNIVERSAL Discount extraction
             try:
-                discount = soup.find('span', {'class': 'savingsPercentage'}) or soup.find('span', string=lambda x: x and '%' in x and 'off' in x.lower())
-                if discount:
-                    discount_text = discount.get_text(strip=True)
-                    product_data.append(f"DISCOUNT: {discount_text}")
-                    print(f"[SCRAPER] ✓ Found discount: {discount_text}")
+                # Strategy 1: Look for percentage patterns
+                discount_pattern = re.compile(r'(\d+)%\s*off|(\d+)%\s*discount|save\s*(\d+)%', re.IGNORECASE)
+                page_text = soup.get_text()
+                discount_matches = discount_pattern.findall(page_text)
+                
+                if discount_matches:
+                    # Get the first valid discount
+                    for match in discount_matches:
+                        discount_value = next((m for m in match if m), None)
+                        if discount_value:
+                            product_data.append(f"DISCOUNT: {discount_value}% off")
+                            print(f"[SCRAPER] ✓ Found discount: {discount_value}% off")
+                            break
+                
+                # Strategy 2: Look for specific discount classes
+                if not any('DISCOUNT:' in item for item in product_data):
+                    discount_selectors = [
+                        {'class': 'savingsPercentage'},  # Amazon
+                        {'class': 'discount'},          # Generic
+                        {'class': 'off'},               # Generic
+                    ]
+                    
+                    for selector in discount_selectors:
+                        discount_elem = soup.find(['span', 'div'], selector)
+                        if discount_elem:
+                            discount_text = discount_elem.get_text(strip=True)
+                            if '%' in discount_text and ('off' in discount_text.lower() or 'discount' in discount_text.lower()):
+                                product_data.append(f"DISCOUNT: {discount_text}")
+                                print(f"[SCRAPER] ✓ Found discount (Class Strategy): {discount_text}")
+                                break
             except Exception as e:
                 print(f"[SCRAPER] Discount extraction failed: {e}")
             
-            # MRP/Original Price
+            # UNIVERSAL MRP/Original Price extraction
             try:
-                mrp = soup.find('span', {'class': 'a-text-price'})
-                if mrp:
-                    mrp_text = mrp.get_text(strip=True)
-                    if 'M.R.P' in mrp_text or '₹' in mrp_text:
-                        product_data.append(f"MRP: {mrp_text}")
-                        print(f"[SCRAPER] ✓ Found MRP: {mrp_text}")
+                # Strategy 1: Look for MRP patterns
+                mrp_pattern = re.compile(r'M\.R\.P[:\s]*[₹$€£]\s*[\d,]+|MRP[:\s]*[₹$€£]\s*[\d,]+|Original[:\s]*[₹$€£]\s*[\d,]+', re.IGNORECASE)
+                page_text = soup.get_text()
+                mrp_matches = mrp_pattern.findall(page_text)
+                
+                if mrp_matches:
+                    mrp_text = mrp_matches[0].strip()
+                    product_data.append(f"MRP: {mrp_text}")
+                    print(f"[SCRAPER] ✓ Found MRP: {mrp_text}")
+                
+                # Strategy 2: Look for specific MRP classes
+                if not any('MRP:' in item for item in product_data):
+                    mrp_selectors = [
+                        {'class': 'a-text-price'},      # Amazon
+                        {'class': 'mrp'},               # Generic
+                        {'class': 'original-price'},     # Generic
+                        {'class': 'strike'},             # Generic
+                    ]
+                    
+                    for selector in mrp_selectors:
+                        mrp_elem = soup.find(['span', 'div'], selector)
+                        if mrp_elem:
+                            mrp_text = mrp_elem.get_text(strip=True)
+                            if any(char.isdigit() for char in mrp_text) and ('₹' in mrp_text or '$' in mrp_text):
+                                product_data.append(f"MRP: {mrp_text}")
+                                print(f"[SCRAPER] ✓ Found MRP (Class Strategy): {mrp_text}")
+                                break
             except Exception as e:
                 print(f"[SCRAPER] MRP extraction failed: {e}")
             
