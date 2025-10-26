@@ -77,7 +77,7 @@ def web_scrapper(url: str, full_page: bool = False):
             # UNIVERSAL Price extraction (works on ANY e-commerce site)
             price_found = False
             
-            # Strategy 1: Universal regex pattern for prices
+            # Strategy 1: Universal regex pattern for prices (improved accuracy)
             try:
                 # Enhanced pattern to catch ₹41,990, $299.99, etc.
                 price_pattern = re.compile(r'[₹$€£]\s*[\d,]+(?:\.\d{2})?')
@@ -87,15 +87,47 @@ def web_scrapper(url: str, full_page: bool = False):
                 price_matches = price_pattern.findall(page_text)
                 
                 if price_matches:
-                    # Get the most likely price (usually the first/largest one)
-                    for price_match in price_matches[:3]:  # Check first 3 matches
-                        # Clean up the price
+                    # Filter out very small prices (likely not main product price)
+                    valid_prices = []
+                    for price_match in price_matches:
                         clean_price = price_match.strip()
-                        if len(clean_price) > 3:  # Must be substantial price
-                            product_data.append(f"PRICE: {clean_price}")
-                            print(f"[SCRAPER] ✓ Found price (Universal Strategy 1): {clean_price}")
+                        # Extract numeric value
+                        numeric_value = re.sub(r'[₹$€£,\s]', '', clean_price)
+                        try:
+                            price_num = float(numeric_value)
+                            # Only consider prices between ₹100 and ₹10,00,000 (reasonable product range)
+                            if 100 <= price_num <= 1000000:
+                                valid_prices.append((clean_price, price_num))
+                        except ValueError:
+                            continue
+                    
+                    # Sort by price value and take the most reasonable one
+                    if valid_prices:
+                        valid_prices.sort(key=lambda x: x[1])  # Sort by numeric value
+                        
+                        # STRATEGY: Take the SECOND-MOST common price range to avoid accessories/promotional prices
+                        # This filters out things like "₹50 add-ons" and focuses on main product price
+                        
+                        # Group prices into logical ranges
+                        price_ranges = {}
+                        for price_str, price_num in valid_prices:
+                            # Round to nearest 100 for grouping
+                            rounded_price = round(price_num / 100) * 100
+                            if rounded_price not in price_ranges:
+                                price_ranges[rounded_price] = []
+                            price_ranges[rounded_price].append(price_str)
+                        
+                        # Find the price range with most occurrences
+                        sorted_ranges = sorted(price_ranges.items(), key=lambda x: len(x[1]), reverse=True)
+                        
+                        if sorted_ranges:
+                            # Take the most common price range
+                            most_common_price_range = sorted_ranges[0][1]
+                            selected_price = most_common_price_range[0]  # Take first price from most common range
+                            
+                            product_data.append(f"PRICE: {selected_price}")
+                            print(f"[SCRAPER] ✓ Found price (Universal Strategy 1): {selected_price} from range: {len(most_common_price_range)} prices")
                             price_found = True
-                            break
             except Exception as e:
                 print(f"[SCRAPER] Universal Price Strategy 1 failed: {e}")
             
