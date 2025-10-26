@@ -30,20 +30,26 @@ async def query_handler(request: Request):
         intent = intent_detection(user_query)
         print(f"[LOG] Detected intent: {intent.intent}, scope: {intent.scope}, message_forward: {intent.message_forward}")
         
-        # Process based on intent
+        # Process based on intent - ALWAYS handle intelligently
         answer = None
         res = None
         
-        if intent.intent == "ask":
-            print(f"[LOG] Processing 'ask' intent with scope: {intent.scope}")
-            chat_history = "\n".join([f"{msg.get('message_type')}: {msg.get('message')}" for msg in session_details.get("chat_messages")])
-            answer = asking(intent.message_forward, domain, current_page_url, intent.scope, session_id, chat_history)
-            print(f"[LOG] Got answer: {answer[:100] if answer else 'None'}...")
-            res = JSONResponse(content={"answer": answer}, status_code=200)
+        # Determine the best handling approach
+        chat_history = "\n".join([f"{msg.get('message_type')}: {msg.get('message')}" for msg in session_details.get("chat_messages")])
+        
+        # For current_page scope, always use current_page_asking for context-aware responses
+        if intent.scope == "current_page":
+            print(f"[LOG] Processing '{intent.intent}' intent with scope: current_page")
+            from cases.asking import current_page_asking
+            # Use the ORIGINAL user query, not the modified message_forward
+            answer = current_page_asking(user_query, current_page_url)
         else:
-            print(f"[LOG] Intent '{intent.intent}' not recognized as 'ask'")
-            answer = "I didn't understand that. Could you please rephrase?"
-            res = JSONResponse(content={"message": "Intent not recognized", "intent": intent.intent, "answer": answer}, status_code=200)
+            # For other scopes, use the general asking function
+            print(f"[LOG] Processing '{intent.intent}' intent with scope: {intent.scope}")
+            answer = asking(user_query, domain, current_page_url, intent.scope, session_id, chat_history)
+        
+        print(f"[LOG] Got answer: {answer[:100] if answer else 'None'}...")
+        res = JSONResponse(content={"answer": answer}, status_code=200)
     
         # Add messages to both DB and Redis
         await add_chats(session_id, user_query, "user", intent.intent, user_id)

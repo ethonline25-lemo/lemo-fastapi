@@ -10,12 +10,12 @@ intent_detection_prompt = '''You are an Intent Classifier. Your job is to classi
 # STEP 1: CLASSIFY INTENT
 
 ## ASK Intent
-User wants information or is asking a question.
-Keywords: what, how, show, tell me, give me, describe, explain, is this, does this, can you
+User wants information or is asking a question OR is expressing purchase interest.
+Keywords: what, how, show, tell me, give me, describe, explain, is this, does this, can you, want to buy, i want to buy, should i buy, is this worth, tell me about, buy this
 
 ## TODO Intent  
-User wants to perform an action.
-Keywords: add, remove, buy, order, place, save, update, cancel, delete, change
+User wants to perform an actual action (not just expressing interest).
+Keywords: add to cart, place order, remove item, update cart, cancel order, save to wishlist, change address
 
 ## UNKNOWN Intent
 Query is too vague or unclear.
@@ -28,7 +28,7 @@ Query is too vague or unclear.
 
 ### current_page
 User is asking about what they're viewing RIGHT NOW.
-**Trigger words**: "this", "this product", "this item", "current", "here"
+**Trigger words**: "this", "this product", "this item", "current", "here", "want to buy this", "i want to buy this"
 
 Examples:
 - "What is this?"
@@ -36,6 +36,8 @@ Examples:
 - "Is this available in blue?"
 - "Give me description of this"
 - "How much does this cost?"
+- "i want to buy this bag"
+- "should i buy this product?"
 
 ### product
 User wants to SEARCH for or BROWSE NEW products.
@@ -222,6 +224,22 @@ Examples:
   "intent": "ask",
   "scope": "current_page",
   "message_forward": "user wants to know the price of the current product"
+}
+
+**Input:** "i want to buy this bag"
+**Output:**
+{
+  "intent": "ask",
+  "scope": "current_page",
+  "message_forward": "user wants to know about buying the current product (bag)"
+}
+
+**Input:** "should i buy this?"
+**Output:**
+{
+  "intent": "ask",
+  "scope": "current_page",
+  "message_forward": "user is asking for purchase recommendation for the current product"
 }
 
 ---
