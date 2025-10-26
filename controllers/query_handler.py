@@ -66,3 +66,9 @@ async def query_handler(request: Request):
         import traceback
         traceback.print_exc()
         return JSONResponse(content={"message": "Internal server error", "error": str(e)}, status_code=500)
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in query_handler: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(content={"message": "Internal server error", "error": str(e)}, status_code=500)
+
